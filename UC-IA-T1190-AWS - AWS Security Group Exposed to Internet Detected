@@ -1,0 +1,150 @@
+Description : Detects multiple failed AWS Management Console login attempts from the same source IP against an AWS user account, including scenarios where multiple failed authentication attempts are followed by a successful login within a defined time window.
+
+KQL : 
+let FailureThreshold = 5;
+let TimeWindow = 15m;
+let ConsoleLogin =
+    AWSCloudTrail
+    | where EventName == "ConsoleLogin"
+    | extend
+        UserName = tostring(UserIdentityUserName),
+        SourceIP = tostring(SourceIpAddress),
+        ResponseData = parse_json(tostring(ResponseElements)),
+        AdditionalData = parse_json(tostring(AdditionalEventData))
+    | extend
+        LoginResult = tostring(ResponseData.ConsoleLogin),
+        MFAUsed = tostring(AdditionalData.MFAUsed),
+        MFAIdentifier = tostring(AdditionalData.MFAIdentifier),
+        LoginTo = tostring(AdditionalData.LoginTo)
+    | project
+        TimeGenerated,
+        UserName,
+        SourceIP,
+        LoginResult,
+        MFAUsed,
+        MFAIdentifier,
+        LoginTo,
+        UserAgent,
+        AWSRegion,
+        EventSource;
+let FailedAttempts =
+    ConsoleLogin
+    | where LoginResult == "Failure"
+    | summarize
+        FailedAttempts = count(),
+        FirstFailedAttempt = min(TimeGenerated),
+        LastFailedAttempt = max(TimeGenerated)
+        by UserName, SourceIP
+    | where FailedAttempts >= FailureThreshold;
+let SuccessfulLogins =
+    ConsoleLogin
+    | where LoginResult == "Success"
+    | project
+        SuccessfulLoginTime = TimeGenerated,
+        SuccessUserName = UserName,
+        SuccessSourceIP = SourceIP,
+        SuccessMFAUsed = MFAUsed,
+        MFAIdentifier,
+        LoginTo,
+        UserAgent,
+        AWSRegion,
+        EventSource;
+FailedAttempts
+| join kind=leftouter SuccessfulLogins
+    on $left.UserName == $right.SuccessUserName,
+       $left.SourceIP == $right.SuccessSourceIP
+| extend
+    IsSuccessfulBruteForce =
+        isnotempty(SuccessfulLoginTime)
+        and SuccessfulLoginTime >= LastFailedAttempt
+        and SuccessfulLoginTime <= LastFailedAttempt + TimeWindow
+| summarize
+    SuccessfulLoginTime = minif(
+        SuccessfulLoginTime,
+        IsSuccessfulBruteForce == true
+    ),
+    SuccessMFAUsed = take_anyif(
+        SuccessMFAUsed,
+        IsSuccessfulBruteForce == true
+    ),
+    MFAIdentifier = take_anyif(
+        MFAIdentifier,
+        IsSuccessfulBruteForce == true
+    ),
+    LoginTo = take_anyif(
+        LoginTo,
+        IsSuccessfulBruteForce == true
+    ),
+    UserAgent = take_anyif(
+        UserAgent,
+        IsSuccessfulBruteForce == true
+    ),
+    AWSRegion = take_anyif(
+        AWSRegion,
+        IsSuccessfulBruteForce == true
+    ),
+    EventSource = take_anyif(
+        EventSource,
+        IsSuccessfulBruteForce == true
+    )
+    by
+        FirstFailedAttempt,
+        LastFailedAttempt,
+        UserName,
+        SourceIP,
+        FailedAttempts
+| extend
+    BruteForceType = iff(
+        isnotempty(SuccessfulLoginTime),
+        "Multiple Failed Attempts Followed by Successful Login",
+        "Multiple Failed Login Attempts"
+    )
+| extend
+    Severity = iff(
+        BruteForceType == "Multiple Failed Attempts Followed by Successful Login",
+        "High",
+        "Medium"
+    )
+| extend
+    AlertDescription = case(
+        BruteForceType == "Multiple Failed Attempts Followed by Successful Login",
+        strcat(
+            "Multiple failed AWS Console login attempts were detected for user '",
+            UserName,
+            "' from source IP '",
+            SourceIP,
+            "', followed by a successful login within ",
+            tostring(TimeWindow),
+            ". This activity may indicate successful brute-force activity or account compromise."
+        ),
+        strcat(
+            "Multiple failed AWS Console login attempts were detected for user '",
+            UserName,
+            "' from source IP '",
+            SourceIP,
+            "'. A total of ",
+            tostring(FailedAttempts),
+            " failed login attempts were observed. This activity may indicate brute-force or password-spraying activity."
+        )
+    )
+| extend
+    RuleName = "UC-TA0006-T1110-AWS - AWS Console Brute Force and Password Spraying Detected"
+| project
+    TimeGenerated = coalesce(SuccessfulLoginTime, LastFailedAttempt),
+    RuleName,
+    AlertDescription,
+    Severity,
+    BruteForceType,
+    UserName,
+    SourceIP,
+    FailedAttempts,
+    FirstFailedAttempt,
+    LastFailedAttempt,
+    SuccessfulLoginTime,
+    SuccessMFAUsed,
+    MFAIdentifier,
+    LoginTo,
+    UserAgent,
+    AWSRegion,
+    EventSource
+| order by TimeGenerated desc
