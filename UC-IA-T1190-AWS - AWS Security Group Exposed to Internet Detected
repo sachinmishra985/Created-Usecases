@@ -1,0 +1,10 @@
+Description : Detects AWS Security Groups that are configured to allow inbound network access from the public internet (0.0.0.0/0 or ::/0) on potentially sensitive ports. This may expose AWS resources to unauthorized access, increasing the risk of reconnaissance, exploitation, brute-force attacks, or compromise. 
+
+KQL :
+AWSCloudTrail
+| where EventName =~ "AuthorizeSecurityGroupIngress"
+| extend RequestData = parse_json(tostring(RequestParameters))
+| extend RequestString = tostring(RequestParameters)
+| where RequestString contains "0.0.0.0/0"
+    or RequestString contains "::/0"
+| order by TimeGenerated desc
