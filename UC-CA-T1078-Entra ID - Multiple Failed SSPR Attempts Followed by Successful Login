@@ -1,0 +1,93 @@
+Description : Detects multiple failed Self-Service Password Reset (SSPR) attempts for an Entra ID user followed by a successful login within a defined time window. This activity may indicate suspicious password-reset behavior or a potential account compromise, particularly when the successful authentication occurs from a different IP address, device, or location than those associated with the failed reset attempts.
+KQL :
+
+let FailureThreshold = 3;
+let FailureWindow = 60m;
+let LoginWindow = 60m;
+let Lookback = 1d;
+let FailedSSPR =
+    AuditLogs
+    | where TimeGenerated >= ago(Lookback)
+    | where Category =~ "UserManagement"
+    | where OperationName =~ "Self-service password reset flow activity progress"
+    | where Result =~ "failure"
+    | extend
+        InitiatedByUPN = tostring(InitiatedBy.user.userPrincipalName),
+        InitiatedByIP = tostring(InitiatedBy.user.ipAddress)
+    | mv-expand TargetResource = TargetResources
+    | extend
+        TargetUPN = tostring(TargetResource.userPrincipalName),
+        TargetUser = tostring(TargetResource.displayName)
+    | where isnotempty(TargetUPN)
+    | project
+        TimeGenerated,
+        TargetUPN,
+        TargetUser,
+        InitiatedByUPN,
+        InitiatedByIP
+    | sort by TargetUPN asc, TimeGenerated asc
+    | serialize
+    | extend
+        NextFailureTime = next(TimeGenerated),
+        NextTargetUPN = next(TargetUPN)
+    | where TargetUPN == NextTargetUPN
+    | summarize
+        FailedAttempts = count(),
+        FirstFailure = min(TimeGenerated),
+        LastFailure = max(TimeGenerated),
+        FailedIPs = make_set(InitiatedByIP, 20),
+        InitiatingUsers = make_set(InitiatedByUPN, 20)
+        by TargetUPN, TargetUser, bin(TimeGenerated, FailureWindow)
+    | where FailedAttempts >= FailureThreshold;
+let SuccessfulLogin =
+    SigninLogs
+    | where TimeGenerated >= ago(Lookback)
+    | where ResultType == 0
+    | where isnotempty(UserPrincipalName)
+    | extend
+        LoginUPN = UserPrincipalName,
+        LoginIP = IPAddress
+    | project
+        LoginTime = TimeGenerated,
+        LoginUPN,
+        LoginIP,
+        AppDisplayName,
+        DeviceDetail,
+        Location;
+FailedSSPR
+| join kind=inner SuccessfulLogin
+    on $left.TargetUPN == $right.LoginUPN
+| where LoginTime > LastFailure
+| where LoginTime <= LastFailure + LoginWindow
+| extend
+    AlertName =
+        "HGS-UC-CA-Entra ID - Multiple Failed SSPR Attempts Followed by Successful Login",
+    TimeBetweenFailureAndLogin =
+        LoginTime - LastFailure,
+    LoginFromDifferentIP =
+        iff(
+            isnotempty(LoginIP)
+            and array_length(FailedIPs) > 0
+            and not(set_has_element(FailedIPs, LoginIP)),
+            true,
+            false
+        )
+| summarize arg_min(LoginTime, *)
+    by TargetUPN, FirstFailure, LastFailure
+| project
+    AlertName,
+    TargetUPN,
+    TargetUser,
+    FailedAttempts,
+    FirstFailure,
+    LastFailure,
+    FailedIPs,
+    InitiatingUsers,
+    LoginTime,
+    LoginIP,
+    LoginFromDifferentIP,
+    AppDisplayName,
+    DeviceDetail,
+    Location,
+    TimeBetweenFailureAndLogin
+| order by LoginTime desc
