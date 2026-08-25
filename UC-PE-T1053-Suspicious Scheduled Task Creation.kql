@@ -1,5 +1,5 @@
-Description : This use case detects potentially suspicious scheduled task creation events on Windows systems by monitoring Event ID 4698 in the Security Event log. The detection identifies tasks that may be used by attackers to establish persistence, execute malicious code, or automate unauthorized activities.
-KQL :
+//Description : This use case detects potentially suspicious scheduled task creation events on Windows systems by monitoring Event ID 4698 in the Security Event log. The detection identifies tasks that may be used by attackers to establish persistence, execute malicious code, or automate unauthorized activities.
+//KQL :
 
 SecurityEvent
 | where EventID == 4698
