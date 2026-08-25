@@ -1,6 +1,5 @@
-Description : Detects user account management activities in Microsoft Entra ID, including account creation, deletion, enable/disable actions,, license modifications, and manager updates. The use case helps identify potentially unauthorized account changes by monitoring the initiator, target user, source IP, and changes performed.
-
-KQL :
+//Description : Detects user account management activities in Microsoft Entra ID, including account creation, deletion, enable/disable actions,, license modifications, and manager updates. The use case helps identify potentially unauthorized account changes by monitoring the initiator, target user, source IP, and changes performed.
+//KQL :
 
 AuditLogs
 | where Category == "UserManagement"
