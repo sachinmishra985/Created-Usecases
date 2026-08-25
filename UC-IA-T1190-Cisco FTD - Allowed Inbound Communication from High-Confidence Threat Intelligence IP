@@ -1,0 +1,80 @@
+Description : Detects Cisco FTD connection events (Event IDs: 430002 and 430003) where an allowed network communication originates from a high-confidence Threat Intelligence IP address. This detection helps identify potential interactions with known malicious infrastructure, enabling security teams to promptly investigate and respond to suspicious activity.
+KQL :
+
+let dt_lookBack = 1h;
+let ioc_lookBack = 7d;
+let TI_IPs =
+    (
+    union
+        ThreatIntelIndicators,
+        workspace("xyz").ThreatIntelIndicators
+    | where TimeGenerated >= ago(ioc_lookBack)
+    | where IsActive == true
+    | where ValidUntil > now()
+    | summarize arg_max(TimeGenerated, *) by ObservableValue
+    | project
+        TI_IP = tostring(ObservableValue),
+        ThreatType = tostring(parse_json(tostring(Data.indicator_types))[0]),
+        Confidence
+    );
+Syslog
+| where TimeGenerated >= ago(dt_lookBack)
+| extend EventID = toint(extract(@"%FTD-\d-(\d+):", 1, SyslogMessage))
+| where EventID in(430002, 430003)
+| extend
+    SrcIP = extract(@"SrcIP:\s*([^,]+)", 1, SyslogMessage),
+    DstIP = extract(@"DstIP:\s*([^,]+)", 1, SyslogMessage),
+    SrcPort = toint(extract(@"SrcPort:\s*(\d+)", 1, SyslogMessage)),
+    DstPort = toint(extract(@"DstPort:\s*(\d+)", 1, SyslogMessage)),
+    DeviceAction = extract(@"AccessControlRuleAction:\s*([^,]+)", 1, SyslogMessage),
+    RuleName = extract(@"AccessControlRuleName:\s*([^,]+)", 1, SyslogMessage),
+    ACPolicy = extract(@"ACPolicy:\s*([^,]+)", 1, SyslogMessage),
+    URL = iff(
+              EventID == 430003,
+              extract(@"https?://[^,""<>\s]+", 0, SyslogMessage),
+              ""
+          ),
+    DNSQuery = iff(
+                   EventID == 430002,
+                   extract(@"DNSQuery:\s*([^,]+)", 1, SyslogMessage),
+                   ""
+               )
+| where DeviceAction == "Allow"
+| where isnotempty(SrcIP)
+| where not(ipv4_is_private(SrcIP))
+| lookup kind = inner TI_IPs on $left.SrcIP == $right.TI_IP
+| where Confidence >= 70
+| summarize
+    EventCount = count(),
+    FirstSeen = min(TimeGenerated),
+    LastSeen = max(TimeGenerated),
+    DstIPs = make_set(DstIP, 100),
+    DstPorts = make_set(DstPort, 100),
+    Urls = make_set_if(URL, isnotempty(URL), 100),
+    SrcPorts = make_set(SrcPort, 100)
+    by
+    SrcIP,
+    ThreatType,
+    Confidence,
+    Computer,
+    DeviceAction,
+    CollectorHostName,
+    RuleName,
+    ACPolicy
+| where EventCount > 10
+| project
+    FirstSeen,
+    LastSeen,
+    SrcIP,
+    ThreatType,
+    Confidence,
+    EventCount,
+    DeviceAction,
+    SrcPorts,
+    DstIPs,
+    DstPorts,
+    Urls,
+    RuleName,
+    ACPolicy,
+    Computer,
+    CollectorHostName
