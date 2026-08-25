@@ -1,6 +1,6 @@
-Description : Detects potentially malicious process creation activity based on Windows Security Event ID 4688, focusing on suspicious parent-child process relationships and command-line execution patterns associated with malware, LOLBins, scripting interpreters, and post-exploitation activity.
+//Description : Detects potentially malicious process creation activity based on Windows Security Event ID 4688, focusing on suspicious parent-child process relationships and command-line execution patterns associated with malware, LOLBins, scripting interpreters, and post-exploitation activity.
 
-KQL :
+//KQL :
 
 SecurityEvent
 | where EventID == 4688
