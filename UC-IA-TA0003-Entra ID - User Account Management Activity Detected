@@ -1,0 +1,89 @@
+Description : Detects user account management activities in Microsoft Entra ID, including account creation, deletion, enable/disable actions,, license modifications, and manager updates. The use case helps identify potentially unauthorized account changes by monitoring the initiator, target user, source IP, and changes performed.
+
+KQL :
+
+AuditLogs
+| where Category == "UserManagement"
+| where OperationName in (
+    "Add user",
+    "Delete user",
+    "Restore user",
+    "Disable account",
+    "Enable account",
+    "Update user license",
+    "Add manager to user",
+    "Remove manager from user",
+    "Assign license to user",
+    "Remove license from user"
+)
+| extend
+    InitiatedByDisplayName = tostring(InitiatedBy.user.displayName),
+    InitiatedByUPN = tostring(InitiatedBy.user.userPrincipalName),
+    InitiatedByIP = tostring(InitiatedBy.user.ipAddress),
+    InitiatedByAppName = tostring(InitiatedBy.app.displayName),
+    InitiatedByAppId = tostring(InitiatedBy.app.appId),
+    InitiatedByServicePrincipalId = tostring(InitiatedBy.app.servicePrincipalId)
+| mv-expand TargetResource = TargetResources
+| extend
+    TargetUserId = tostring(TargetResource.id),
+    TargetUser = tostring(TargetResource.displayName),
+    TargetUPN = tostring(TargetResource.userPrincipalName),
+    TargetType = tostring(TargetResource.type)
+| mv-expand ModifiedProperty = TargetResource.modifiedProperties
+| extend
+    PropertyName = tostring(ModifiedProperty.displayName),
+    OldValue = tostring(ModifiedProperty.oldValue),
+    NewValue = tostring(ModifiedProperty.newValue)
+| extend
+    PropertyChange = strcat(
+        PropertyName,
+        " (Old: ",
+        coalesce(iff(OldValue == "[]" or isempty(OldValue), "NULL", OldValue), "NULL"),
+        ", New: ",
+        coalesce(iff(NewValue == "[]" or isempty(NewValue), "NULL", NewValue), "NULL"),
+        ")"
+    )
+| summarize
+    Changes = make_set(PropertyChange)
+    by
+    TimeGenerated,
+    OperationName,
+    Result,
+    InitiatedByDisplayName,
+    InitiatedByUPN,
+    InitiatedByIP,
+    InitiatedByAppName,
+    InitiatedByAppId,
+    InitiatedByServicePrincipalId,
+    TargetUserId,
+    TargetUser,
+    TargetUPN,
+    TargetType
+| extend
+    Initiator = case(
+        isnotempty(InitiatedByDisplayName), InitiatedByDisplayName,
+        isnotempty(InitiatedByAppName), InitiatedByAppName,
+        "Unknown"
+    )
+| extend AlertName = strcat(
+    "UC-SEC-Entra ID - User Account Management Activity - ",
+    OperationName
+)
+| project
+    TimeGenerated,
+    AlertName,
+    OperationName,
+    Result,
+    Initiator,
+    InitiatedByDisplayName,
+    InitiatedByUPN,
+    InitiatedByIP,
+    InitiatedByAppName,
+    InitiatedByAppId,
+    InitiatedByServicePrincipalId,
+    TargetUserId,
+    TargetUser,
+    TargetUPN,
+    TargetType,
+    Changes
+| order by TimeGenerated desc
