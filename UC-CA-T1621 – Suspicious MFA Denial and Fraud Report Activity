@@ -1,6 +1,5 @@
-Description : User explicitly denies MFA push, indicating that login was not expected and the account's password may be compromised.
-
-KQL : 
+//Description : User explicitly denies MFA push, indicating that login was not expected and the account's password may be compromised.
+//KQL : 
 
 let aadFunc = (tableName: string) {
     table(tableName)
