@@ -1,0 +1,56 @@
+Description: This use case detects potential Remote Desktop Protocol (RDP) brute-force attacks by identifying multiple failed RDP logon attempts (Windows Event ID 4625, Logon Type 10) followed by a successful RDP logon (Windows Event ID 4624, Logon Type 10) from the same source IP address against the same user account and destination host within a defined time window. Such activity may indicate successful credential guessing, password spraying, or brute-force attacks resulting in unauthorized remote access.
+
+KQL
+
+let FailedThreshold = 2;
+let TimeWindow = 10m;
+let FailedLogins =
+    SecurityEvent
+    | where TimeGenerated >= ago(1h)
+    | where EventID == 4625
+    | where LogonType == 10
+    | where isnotempty(IpAddress)
+    | where IpAddress !in("-", "::1", "127.0.0.1")
+    | where Account !endswith "$"
+    | summarize
+        FailedCount = count(),
+        FirstFailed = min(TimeGenerated),
+        LastFailed = max(TimeGenerated),
+        FailureReasons = make_set(SubStatus)
+        by Account, Computer, IpAddress, TimeBucket = bin(TimeGenerated, TimeWindow)
+    | where FailedCount >= FailedThreshold;
+let SuccessfulLogins =
+    SecurityEvent
+    | where TimeGenerated >= ago(1h)
+    | where EventID == 4624
+    | where LogonType == 10
+    | where isnotempty(IpAddress)
+    | where IpAddress !in("-", "::1", "127.0.0.1")
+    | where Account !endswith "$"
+    | project
+        SuccessTime = TimeGenerated,
+        Account,
+        Computer,
+        IpAddress,
+        AuthenticationPackageName,
+        LogonProcessName,
+        ProcessName;
+FailedLogins
+| join kind = innerunique SuccessfulLogins on Account, Computer, IpAddress
+| where SuccessTime >= LastFailed
+| where SuccessTime <= LastFailed + TimeWindow
+| extend TimeToSuccess = SuccessTime - LastFailed
+| project
+    SuccessTime,
+    Account,
+    SourceIP = IpAddress,
+    DestinationHost = Computer,
+    FailedCount,
+    FirstFailed,
+    LastFailed,
+    TimeToSuccess,
+    AuthenticationPackageName,
+    LogonProcessName,
+    ProcessName,
+    FailureReasons
+| order by SuccessTime desc
