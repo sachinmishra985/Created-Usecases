@@ -1,0 +1,66 @@
+Description :Detects multiple authentication failures from the same source IP against a Linux system, followed by a successful login. This activity may indicate a successful brute-force or password-guessing attack where an attacker gains access after repeated failed authentication attempts.
+
+KQL :
+
+let FailedThreshold = 5;
+let TimeWindow = 15m;
+let FailedLogins =
+    Syslog
+    | where Facility =~ "authpriv"
+    | where SyslogMessage has_any (
+        "authentication failure",
+        "Failed password",
+        "Failed publickey",
+        "Failed keyboard-interactive",
+        "Invalid user",
+        "user unknown",
+        "authentication error",
+        "login failed",
+        "failure"
+    )
+    | extend SourceIP = extract(@"(?:rhost=|from\s+)([^\s]+)", 1, SyslogMessage)
+    | where isnotempty(SourceIP)
+    | summarize
+        FailedAttempts = count(),
+        FirstFailure = min(TimeGenerated),
+        LastFailure = max(TimeGenerated),
+        FailedMessages = make_set(SyslogMessage, 10)
+        by Computer, SourceIP;
+let SuccessfulLogins =
+    Syslog
+    | where Facility =~ "authpriv"
+    | where SyslogMessage has_any (
+        "Accepted password",
+        "Accepted publickey",
+        "Accepted keyboard-interactive",
+        "authentication success",
+        "authentication succeeded",
+        "session opened",
+        "login successful",
+        "Successful login"
+    )
+    | extend SourceIP = extract(@"(?:from|rhost=)\s*([^\s]+)", 1, SyslogMessage)
+    | where isnotempty(SourceIP)
+    | project
+        SuccessTime = TimeGenerated,
+        Computer,
+        SourceIP,
+        SuccessMessage = SyslogMessage;
+FailedLogins
+| join kind=inner SuccessfulLogins
+    on Computer, SourceIP
+| where FailedAttempts >= FailedThreshold
+| where SuccessTime > LastFailure
+| where SuccessTime <= LastFailure + TimeWindow
+| extend TimeBetweenFailureAndSuccess = SuccessTime - LastFailure
+| project
+    SuccessTime,
+    Computer,
+    SourceIP,
+    FailedAttempts,
+    FirstFailure,
+    LastFailure,
+    TimeBetweenFailureAndSuccess,
+    FailedMessages,
+    SuccessMessage
+| order by SuccessTime desc
