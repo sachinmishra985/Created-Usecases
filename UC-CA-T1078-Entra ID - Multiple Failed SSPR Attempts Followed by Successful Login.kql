@@ -1,6 +1,5 @@
-Description : Detects multiple failed Self-Service Password Reset (SSPR) attempts for an Entra ID user followed by a successful login within a defined time window. This activity may indicate suspicious password-reset behavior or a potential account compromise, particularly when the successful authentication occurs from a different IP address, device, or location than those associated with the failed reset attempts.
-KQL :
-
+//Description : Detects multiple failed Self-Service Password Reset (SSPR) attempts for an Entra ID user followed by a successful login within a defined time window. This activity may indicate suspicious password-reset behavior or a potential account compromise, particularly when the successful authentication occurs from a different IP address, device, or location than those associated with the failed reset attempts.
+//KQL :
 let FailureThreshold = 3;
 let FailureWindow = 60m;
 let LoginWindow = 60m;
