@@ -1,5 +1,5 @@
-Description : Detects Cisco FTD connection events (Event IDs: 430002 and 430003) where an allowed network communication originates from a high-confidence Threat Intelligence IP address. This detection helps identify potential interactions with known malicious infrastructure, enabling security teams to promptly investigate and respond to suspicious activity.
-KQL :
+//Description : Detects Cisco FTD connection events (Event IDs: 430002 and 430003) where an allowed network communication originates from a high-confidence Threat Intelligence IP address. This detection helps identify potential interactions with known malicious infrastructure, enabling security teams to promptly investigate and respond to suspicious activity.
+//KQL :
 
 let dt_lookBack = 1h;
 let ioc_lookBack = 7d;
