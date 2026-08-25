@@ -1,6 +1,5 @@
-Description : This use case detects successful Remote Desktop Protocol (RDP) login activity occurring outside of normal business hours. It monitors Windows Security Event ID 4624 with Logon Type 10 (RemoteInteractive) to identify potentially suspicious remote access attempts, especially when performed by privileged users, unknown source IP addresses, or from unusual locations.
-
-KQL :
+//Description : This use case detects successful Remote Desktop Protocol (RDP) login activity occurring outside of normal business hours. It monitors Windows Security Event ID 4624 with Logon Type 10 (RemoteInteractive) to identify potentially suspicious remote access attempts, especially when performed by privileged users, unknown source IP addresses, or from unusual locations.
+//KQL :
 
 SecurityEvent
 | where EventID == 4624
