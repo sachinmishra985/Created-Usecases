@@ -1,0 +1,40 @@
+Description : Detects potentially malicious process creation activity based on Windows Security Event ID 4688, focusing on suspicious parent-child process relationships and command-line execution patterns associated with malware, LOLBins, scripting interpreters, and post-exploitation activity.
+
+KQL :
+
+SecurityEvent
+| where EventID == 4688
+| extend
+    ChildProcess = tostring(NewProcessName),
+    ParentProcess = tostring(ParentProcessName),
+    CmdLine = tostring(CommandLine)
+| where ChildProcess endswith_cs "\\powershell.exe"
+    or ChildProcess endswith_cs "\\pwsh.exe"
+//| where not(SubjectAccount endswith "$")
+| where CmdLine has_any(
+    "-enc",
+    "-encodedcommand",
+    "-nop",
+    "-noprofile",
+    "-noninteractive",
+    "-windowstyle hidden",
+    "-executionpolicy bypass",
+    "-ep bypass",
+    "FromBase64String",
+    "ToBase64String",
+    "Invoke-Expression",
+    "IEX",
+    "DownloadString",
+    "DownloadFile",
+    "Invoke-WebRequest",
+    "Invoke-RestMethod",
+    "Start-BitsTransfer",
+    "Net.WebClient",
+    "System.Net.WebClient",
+    "System.Net.HttpWebRequest",
+    "Add-Type",
+    "Reflection.Assembly",
+    "Assembly.Load",
+    "Start-Process"
+    )
+| where AccountType <> "Machine"
