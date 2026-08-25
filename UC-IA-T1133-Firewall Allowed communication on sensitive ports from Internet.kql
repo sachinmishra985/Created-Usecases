@@ -1,6 +1,5 @@
-Description :This use case detects allowed inbound connections from external IP addresses to internal systems over sensitive ports. Such exposure may indicate misconfigured firewall rules and can increase the risk of unauthorized access or exploitation attempts from the internet.
-
-KQL : 
+//Description :This use case detects allowed inbound connections from external IP addresses to internal systems over sensitive ports. Such exposure may indicate misconfigured firewall rules and can increase the risk of unauthorized access or exploitation attempts from the internet.
+//KQL : 
 
 CommonSecurityLog
 | where DeviceAction in~ ("allow", "Accept")
