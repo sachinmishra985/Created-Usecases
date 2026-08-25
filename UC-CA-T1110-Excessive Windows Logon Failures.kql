@@ -1,6 +1,5 @@
-Description :Detects a high volume of failed Windows authentication attempts (Event ID 4625) against user accounts from the same source within a 5-minute window. This may indicate brute-force attacks, password spraying, or unauthorized access attempts, with the failure reason, source IP, target system, and account details provided for investigation.
-
-KQL : 
+//Description :Detects a high volume of failed Windows authentication attempts (Event ID 4625) against user accounts from the same source within a 5-minute window. This may indicate brute-force attacks, password spraying, or unauthorized access attempts, with the failure reason, source IP, target system, and account details provided for investigation.
+//KQL : 
 
 let countlimit = 100;
 SecurityEvent
