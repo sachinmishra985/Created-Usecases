@@ -1,0 +1,39 @@
+Description : Detects successful outbound connections allowed by Cisco FTD where the destination IP matches an active Threat Intelligence indicator. This may indicate command-and-control (C2) communication, malware activity, or communication with known malicious infrastructure.
+
+KQL : 
+
+let dt_lookBack = 1h;
+let ioc_lookBack = 14d;
+let TI_IPs =
+(
+    union
+        ThreatIntelIndicators,
+        workspace("abc").ThreatIntelIndicators
+    | where TimeGenerated >= ago(ioc_lookBack)
+    | where IsActive == true
+    | where ValidUntil > now()
+    | summarize arg_max(TimeGenerated, *) by ObservableValue
+    | extend TI_IP = tostring(ObservableValue)
+    | where TI_IP matches regex @"^\d{1,3}(\.\d{1,3}){3}$"
+    | project
+        TI_IP,
+        ThreatType = tostring(parse_json(tostring(Data.indicator_types))[0]),
+        Confidence
+);
+Syslog
+| where TimeGenerated >= ago(dt_lookBack)
+| extend EventID = toint(extract(@"%FTD-\d-(\d+):", 1, SyslogMessage))
+| where EventID in (430002,430003)
+| extend
+    SrcIP = extract(@"SrcIP:\s*([^,]+)", 1, SyslogMessage),
+    DstIP = extract(@"DstIP:\s*([^,]+)", 1, SyslogMessage),
+    SrcPort = toint(extract(@"SrcPort:\s*(\d+)", 1, SyslogMessage)),
+    DstPort = toint(extract(@"DstPort:\s*(\d+)", 1, SyslogMessage)),
+    DeviceAction = extract(@"AccessControlRuleAction:\s*([^,]+)", 1, SyslogMessage),
+    RuleName = extract(@"AccessControlRuleName:\s*([^,]+)", 1, SyslogMessage),
+    ACPolicy = extract(@"ACPolicy:\s*([^,]+)", 1, SyslogMessage)
+| where DeviceAction == "Allow"
+///| where ipv4_is_private(SrcIP)
+| where not(ipv4_is_private(DstIP))
+| join kind=inner TI_IPs on $left.DstIP == $right.TI_IP
+| order by TimeGenerated desc
