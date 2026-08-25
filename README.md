@@ -1,2 +1,1 @@
-# Created-Usecases
-Here I am Going mention the usecases details which Worked 
+This repository contains detection use cases developed and fine-tuned for Microsoft Sentinel. It includes KQL-based detection logic covering various security threats, along with relevant MITRE ATT&CK techniques and investigation context.
