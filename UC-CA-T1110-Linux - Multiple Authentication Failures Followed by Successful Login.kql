@@ -1,6 +1,5 @@
-Description :Detects multiple authentication failures from the same source IP against a Linux system, followed by a successful login. This activity may indicate a successful brute-force or password-guessing attack where an attacker gains access after repeated failed authentication attempts.
-
-KQL :
+//Description :Detects multiple authentication failures from the same source IP against a Linux system, followed by a successful login. This activity may indicate a successful brute-force or password-guessing attack where an attacker gains access after repeated failed authentication attempts.
+//KQL :
 
 let FailedThreshold = 5;
 let TimeWindow = 15m;
