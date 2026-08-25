@@ -1,6 +1,5 @@
-Description: This use case detects potential Remote Desktop Protocol (RDP) brute-force attacks by identifying multiple failed RDP logon attempts (Windows Event ID 4625, Logon Type 10) followed by a successful RDP logon (Windows Event ID 4624, Logon Type 10) from the same source IP address against the same user account and destination host within a defined time window. Such activity may indicate successful credential guessing, password spraying, or brute-force attacks resulting in unauthorized remote access.
-
-KQL
+//Description: This use case detects potential Remote Desktop Protocol (RDP) brute-force attacks by identifying multiple failed RDP logon attempts (Windows Event ID 4625, Logon Type 10) followed by a successful RDP logon (Windows Event ID 4624, Logon Type 10) from the same source IP address against the same user account and destination host within a defined time window. Such activity may indicate successful credential guessing, password spraying, or brute-force attacks resulting in unauthorized remote access.
+//KQL
 
 let FailedThreshold = 2;
 let TimeWindow = 10m;
