@@ -61,7 +61,7 @@ FailedSSPR
 | where LoginTime <= LastFailure + LoginWindow
 | extend
     AlertName =
-        "HGS-UC-CA-Entra ID - Multiple Failed SSPR Attempts Followed by Successful Login",
+        "UC-CA-Entra ID - Multiple Failed SSPR Attempts Followed by Successful Login",
     TimeBetweenFailureAndLogin =
         LoginTime - LastFailure,
     LoginFromDifferentIP =
