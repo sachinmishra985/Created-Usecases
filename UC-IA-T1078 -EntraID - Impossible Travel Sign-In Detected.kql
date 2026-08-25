@@ -1,6 +1,5 @@
-Description :This use case detects successful Microsoft Entra ID sign-ins from different countries within a short period of time for the same user account. Such activity may indicate impossible travel behavior, potentially resulting from compromised credentials, stolen session tokens, unauthorized access, or VPN/proxy usage.
-
-KQL:
+//Description :This use case detects successful Microsoft Entra ID sign-ins from different countries within a short period of time for the same user account. Such activity may indicate impossible travel behavior, potentially resulting from compromised credentials, stolen session tokens, unauthorized access, or VPN/proxy usage.
+//KQL:
 
 let timeWindow = 1h;
 let SigninsWithGeo =
