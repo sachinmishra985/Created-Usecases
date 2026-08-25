@@ -1,0 +1,35 @@
+Description :This use case detects allowed inbound connections from external IP addresses to internal systems over sensitive ports. Such exposure may indicate misconfigured firewall rules and can increase the risk of unauthorized access or exploitation attempts from the internet.
+
+KQL : 
+
+CommonSecurityLog
+| where DeviceAction in~ ("allow", "Accept")
+| where not(ipv4_is_private(SourceIP))
+| where not(ipv4_is_private(DestinationIP))
+| where SourceIP !startswith "40.107."
+    and SourceIP !startswith "40.93."
+    and SourceIP !startswith "52."
+| where DestinationPort in (21, 22, 23, 25, 110, 135, 139, 143, 389, 445, 1433, 1521, 3306, 3389, 5900, 8080)
+| where ApplicationProtocol !in ("insufficient-data", "incomplete")
+| where Reason !in~ ("aged-out", "tcp-rst-from-server", "tcp-rst-from-client", "aged-out", "policy-deny", "4-Way Handshake timeout", "timeout", "connection_timeout")
+| summarize ConnCount = count(), FirstSeen=min(TimeGenerated), LastSeen=max(TimeGenerated)
+    by
+    SourceIP,
+    DestinationIP,
+    DestinationPort,
+    Computer,
+    ApplicationProtocol,
+    Reason,
+    DeviceAction,ReceivedBytes
+| where ConnCount > 0  and ReceivedBytes > 0
+| project
+    TimeWindow=bin(FirstSeen, 5m),
+    SourceIP,
+    DestinationIP,
+    DestinationPort,
+    Computer,
+    ApplicationProtocol,
+    ConnCount,
+    Reason,
+    DeviceAction,
+    ReceivedBytes
