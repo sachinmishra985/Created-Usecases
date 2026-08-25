@@ -1,0 +1,70 @@
+Description : User explicitly denies MFA push, indicating that login was not expected and the account's password may be compromised.
+
+KQL : 
+
+let aadFunc = (tableName: string) {
+    table(tableName)
+    | where ResultType == "500121"
+    | where Status has_any(
+        "MFA Denied; user declined the authentication",
+        "MFA denied; Phone App Reported Fraud"
+        )
+    | extend
+        PublicIP = tostring(IPAddress),
+        Name = tostring(split(UserPrincipalName, "@")[0]),
+        UPNSuffix = tostring(split(UserPrincipalName, "@")[1]),
+        LocationDetailsDynamic = todynamic(LocationDetails)
+    | extend
+        Country = tostring(LocationDetailsDynamic.countryOrRegion),
+        City = tostring(LocationDetailsDynamic.city),
+        MFAFailureReason = case(
+                               Status has "Phone App Reported Fraud",
+                               "MFA Fraud Reported",
+                               Status has "user declined the authentication",
+                               "User Declined MFA",
+                               "Other MFA Denial"
+                           )
+    | project
+        TimeGenerated,
+        UserPrincipalName,
+        Name,
+        UPNSuffix,
+        PublicIP,
+        Country,
+        City,
+        MFAFailureReason,
+        ResultType,
+        AppDisplayName,
+        ResourceDisplayName;
+};
+let aadSignin = aadFunc("SigninLogs");
+let aadNonInt = aadFunc("AADNonInteractiveUserSignInLogs");
+union isfuzzy = true aadSignin, aadNonInt
+| summarize
+    MFAFailureCount = count(),
+    FailureReasons = make_set(MFAFailureReason),
+    FailureStatuses = make_set(ResultType),
+    PublicIPs = make_set(PublicIP),
+    Cities = make_set(City),
+    Applications = make_set(AppDisplayName)
+    by
+    UserPrincipalName,
+    Name,
+    UPNSuffix,
+    Country
+| where
+    (Country =~ "IN" and MFAFailureCount > 2)
+    or
+    (Country !~ "IN" and MFAFailureCount >= 1)
+| project
+    UserPrincipalName,
+    Name,
+    UPNSuffix,
+    Country,
+    MFAFailureCount,
+    FailureReasons,
+    FailureStatuses,
+    PublicIPs,
+    Cities,
+    Applications
+| order by MFAFailureCount desc 
