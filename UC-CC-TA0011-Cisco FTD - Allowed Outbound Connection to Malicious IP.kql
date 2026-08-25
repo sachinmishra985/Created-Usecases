@@ -1,6 +1,5 @@
-Description : Detects successful outbound connections allowed by Cisco FTD where the destination IP matches an active Threat Intelligence indicator. This may indicate command-and-control (C2) communication, malware activity, or communication with known malicious infrastructure.
-
-KQL : 
+//Description : Detects successful outbound connections allowed by Cisco FTD where the destination IP matches an active Threat Intelligence indicator. This may indicate command-and-control (C2) communication, malware activity, or communication with known malicious infrastructure.
+//KQL : 
 
 let dt_lookBack = 1h;
 let ioc_lookBack = 14d;
