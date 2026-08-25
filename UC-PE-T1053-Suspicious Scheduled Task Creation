@@ -1,0 +1,40 @@
+Description : This use case detects potentially suspicious scheduled task creation events on Windows systems by monitoring Event ID 4698 in the Security Event log. The detection identifies tasks that may be used by attackers to establish persistence, execute malicious code, or automate unauthorized activities.
+KQL :
+
+SecurityEvent
+| where EventID == 4698
+| extend Parsed = parse_xml(EventData)
+| extend
+    SubjectUserSid = tostring(Parsed.EventData.Data[0]["#text"]),
+    SubjectUserName = tostring(Parsed.EventData.Data[1]["#text"]),
+    SubjectDomainName = tostring(Parsed.EventData.Data[2]["#text"]),
+    TaskName = tostring(Parsed.EventData.Data[4]["#text"]),
+    TaskContent = tostring(Parsed.EventData.Data[5]["#text"])
+| extend
+    Command = extract(@"<Command>(.*?)</Command>", 1, TaskContent),
+    Arguments = extract(@"<Arguments>(.*?)</Arguments>", 1, TaskContent)
+| extend SuspiciousReason = case(
+        Command has_any ("powershell.exe","pwsh.exe"), "PowerShell Execution",
+        Command has "cmd.exe", "CMD Execution",
+        Command has_any ("wscript.exe","cscript.exe"), "Script Execution",
+        Command has_any ("mshta.exe","rundll32.exe","regsvr32.exe"), "LOLBin Execution",
+        TaskContent has_any ("\\AppData\\","\\Temp\\","\\Users\\Public\\","ProgramData"), "User Writable Path",
+        Arguments has_any ("-enc","-encodedcommand"), "Encoded PowerShell",
+        SubjectUserName !in~ ("SYSTEM","LOCAL SERVICE","NETWORK SERVICE") and TaskName !startswith @"\Microsoft\", "Non-Standard Task",
+        "Review"
+    )
+| where TaskName !startswith @"\Microsoft\"
+| where TaskName !startswith @"\OneDrive"
+| where TaskName !startswith @"\User_Feed_Synchronization-"
+//| where SuspiciousReason != "Review"
+| where SubjectUserName !endswith "$"
+| project
+    TimeGenerated,
+    Computer,
+    SubjectUserName,
+    SubjectDomainName,
+    TaskName,
+    Command,
+    Arguments,
+    SuspiciousReason
+| order by TimeGenerated desc
