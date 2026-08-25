@@ -1,0 +1,28 @@
+Description : This use case detects successful Remote Desktop Protocol (RDP) login activity occurring outside of normal business hours. It monitors Windows Security Event ID 4624 with Logon Type 10 (RemoteInteractive) to identify potentially suspicious remote access attempts, especially when performed by privileged users, unknown source IP addresses, or from unusual locations.
+
+KQL :
+
+SecurityEvent
+| where EventID == 4624
+| where LogonType == 10
+| extend TimeGeneratedIST = datetime_utc_to_local(TimeGenerated, 'Asia/Kolkata')
+| extend hour = datetime_part("hour", TimeGeneratedIST)
+| extend dayofweek = toint(format_timespan(dayofweek(TimeGeneratedIST), 'd'))
+| extend dayname = case(
+                       dayofweek == 0,
+                       "Sunday",
+                       dayofweek == 1,
+                       "Monday",
+                       dayofweek == 2,
+                       "Tuesday",
+                       dayofweek == 3,
+                       "Wednesday",
+                       dayofweek == 4,
+                       "Thursday",
+                       dayofweek == 5,
+                       "Friday",
+                       dayofweek == 6,
+                       "Saturday",
+                       "unknown"
+                   )
+| where hour < 6 or hour > 20 or dayofweek == 0 or dayofweek == 6
