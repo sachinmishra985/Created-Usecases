@@ -1,0 +1,54 @@
+Description :This use case detects successful Microsoft Entra ID sign-ins from different countries within a short period of time for the same user account. Such activity may indicate impossible travel behavior, potentially resulting from compromised credentials, stolen session tokens, unauthorized access, or VPN/proxy usage.
+
+KQL:
+
+let timeWindow = 1h;
+let SigninsWithGeo =
+    SigninLogs
+    | where TimeGenerated > ago(timeWindow)
+    | where ResultType == 0 and isnotempty(LocationDetails)
+    | extend LocationData = parse_json(LocationDetails)
+    | extend
+        Country = tostring(LocationData.countryOrRegion),
+        City = tostring(LocationData.city),
+        Lat = todouble(LocationData.geoCoordinates.latitude),
+        Long = todouble(LocationData.geoCoordinates.longitude)
+    | where isnotempty(Country) and isnotempty(IPAddress)
+    | project
+        TimeGenerated,
+        UserPrincipalName,
+        IPAddress,
+        Country,
+        City,
+        Lat,
+        Long,
+        AppDisplayName,
+        RiskState;
+SigninsWithGeo
+| join kind = inner (
+    SigninsWithGeo
+    | project
+        Time2 = TimeGenerated,
+        UserPrincipalName,
+        IP2 = IPAddress,
+        Country2 = Country,
+        City2 = City
+    )
+    on UserPrincipalName
+| where TimeGenerated < Time2
+    and abs(datetime_diff("minute", TimeGenerated, Time2)) <= 60
+    and IPAddress != IP2
+    and Country != Country2
+| summarize
+    FirstSignIn = min(TimeGenerated),
+    SecondSignIn = min(Time2),
+    FirstIP = any(IPAddress),
+    SecondIP = any(IP2),
+    FirstCountry = any(Country),
+    SecondCountry = any(Country2),
+    FirstCity = any(City),
+    SecondCity = any(City2),
+    TimeDiffMins = min(abs(datetime_diff("minute", TimeGenerated, Time2)))
+    by UserPrincipalName, AppDisplayName, RiskState
+| order by TimeDiffMins asc
+
