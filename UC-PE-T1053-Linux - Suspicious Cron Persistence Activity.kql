@@ -1,0 +1,27 @@
+//Description:Detects suspicious Linux cron activity that may indicate the use of scheduled jobs for persistence or execution of malicious commands, payloads, reverse shells, or known malware.
+
+let HighRiskCronPatterns = dynamic([
+    "curl | sh",
+    "curl | bash",
+    "wget | sh",
+    "wget | bash",
+    "curl -fsSL",
+    "wget --no-check-certificate",
+    "nc -e",
+    "ncat -e",
+    "socat exec:",
+    ".khp",
+    ".rguard",
+    "ksmd",
+    "javab",
+    "kinsing",
+    "kdevtmpfsi",
+    "xmrig",
+    "stratum+tcp",
+    "stratum+ssl"
+]);
+Syslog
+| where SyslogMessage has_any (HighRiskCronPatterns)
+| where ProcessName in~ ("cron", "crond")
+    or SyslogMessage has_any ("cron", "crond", "crontab")
+| order by TimeGenerated desc
