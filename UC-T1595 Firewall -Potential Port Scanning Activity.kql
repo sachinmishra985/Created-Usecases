@@ -1,0 +1,59 @@
+Description : Detects potential port-scanning activity observed on the Palo Alto Firewall, where a source initiates connections to more than 10 unique destination ports and generates over 100 connection attempts within a 5-minute time window.
+
+KQL : 
+
+CommonSecurityLog
+| where DeviceAction in~("Accept", "Allow")
+| where isnotempty(SourceIP)
+    and isnotempty(DestinationIP)
+    and isnotempty(DestinationPort)
+| extend ScanType = iff(
+                        ipv4_is_private(DestinationIP),
+                        "Internal Scanning",
+                        "External Scanning"
+                    )
+| summarize
+    DistinctPorts = dcount(DestinationPort),
+    DestinationPortsList = make_set(DestinationPort, 1000),
+    TotalConnections = count()
+    by
+    Computer,
+    SourceIP,
+    DestinationIP,
+    DeviceAction,
+    Reason,
+    ScanType,
+    bin(TimeGenerated, 5m)
+| extend
+    PortThreshold = iff(
+                        ScanType == "Internal Scanning",
+                        5,
+                        10
+                    ),
+    ConnectionThreshold = iff(
+                              ScanType == "Internal Scanning",
+                              10,
+                              20
+                          )
+| where DistinctPorts > PortThreshold
+    and TotalConnections > ConnectionThreshold
+| extend AlertName = strcat(
+                         "Palo Alto Firewall - ",
+                         ScanType,
+                         " - Excessive Port Scanning"
+                     )
+| project
+    TimeGenerated,
+    Computer,
+    SourceIP,
+    DestinationIP,
+    ScanType,
+    DestinationPortsList,
+    DeviceAction,
+    Reason,
+    DistinctPorts,
+    TotalConnections,
+    PortThreshold,
+    ConnectionThreshold,
+    AlertName
+| order by DistinctPorts desc
