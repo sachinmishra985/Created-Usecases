@@ -1,0 +1,19 @@
+//Description : Sophos EDR Protection Failed
+//KQL :
+SophosEPEvents_CL
+| where ThreatCategory == "PROTECTION"
+| where EventMessage has_any("failed to protect", "Computer re-protected")
+| extend SourceHostName = DvcHostname, SourceIP = SrcIpAddr
+| project TimeGenerated, SourceHostName, SourceIP, EventMessage
+| summarize
+    MissingTime = minif(TimeGenerated, EventMessage contains "failed to protect"),
+    RecoveryTime = minif(TimeGenerated, EventMessage contains "Computer re-protected")
+    by SourceHostName, SourceIP
+| extend TimeDifferenceHours = datetime_diff('hour', RecoveryTime, MissingTime)
+| where isnull(RecoveryTime) or TimeDifferenceHours > 2
+| project
+    SourceHostName,
+    SourceIP,
+    MissingTime,
+    RecoveryTime,
+    TimeDifferenceHours
