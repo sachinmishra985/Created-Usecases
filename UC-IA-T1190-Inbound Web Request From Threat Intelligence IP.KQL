@@ -1,0 +1,47 @@
+// Description :Detects successful HTTP requests (HTTP 200) to Apache web servers from source IP addresses identified as malicious or suspicious by Threat Intelligence feeds. Apache access logs collected via Syslog are analyzed to identify potential reconnaissance, exploitation attempts, or unauthorized access activity targeting web applications and servers.
+// Severity : High
+// KQL :
+
+let TI =
+union isfuzzy=true
+(
+    ThreatIntelIndicators
+),
+(
+ workspace("abc").ThreatIntelIndicators
+)
+| where IsActive == true
+| where ObservableKey =~ "ipv4-addr:value"
+| extend TI_IP = tostring(ObservableValue)
+| where isnotempty(TI_IP)
+| summarize LatestIndicatorTime = arg_max(TimeGenerated, *) by TI_IP;
+Syslog
+| where Computer == "abc"
+| extend RawLog = SyslogMessage
+| extend SourceIP = extract(@"^(\S+)", 1, RawLog)
+| extend Identity = extract(@"^\S+\s+(\S+)", 1, RawLog)
+| extend User = extract(@"^\S+\s+\S+\s+(\S+)", 1, RawLog)
+| extend EventTime = extract(@"\[([^\]]+)\]", 1, RawLog)
+| extend HttpMethod = extract(@"""([A-Z]+)", 1, RawLog)
+| extend URL = extract(@"""[A-Z]+\s+(\S+)", 1, RawLog)
+| extend HttpVersion = extract(@"HTTP\/([0-9.]+)", 1, RawLog)
+| extend StatusCode = toint(extract(@""" (\d{3}) ", 1, RawLog))
+| extend ResponseSize = tolong(extract(@""" \d{3} (\d+)", 1, RawLog))
+| extend Referrer = extract(@"""(https?:\/\/[^""]*)""", 1, RawLog)
+| extend UserAgent = extract(@"""([^""]*)""$", 1, RawLog)
+| where isnotempty(HttpMethod)
+| extend LowerURL = tolower(url_decode(URL))
+| where StatusCode == 200
+| where SourceIP <> "::1"
+| lookup kind=inner TI on $left.SourceIP == $right.TI_IP
+| project
+    TimeGenerated,
+    SourceIP,
+    HttpMethod,
+    URL,
+    StatusCode,
+    UserAgent,
+    Referrer,
+    LatestIndicatorTime
+| order by TimeGenerated desc
+
