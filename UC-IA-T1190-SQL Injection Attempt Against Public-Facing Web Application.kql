@@ -1,0 +1,84 @@
+// Description : Detects SQL injection activity targeting public-facing web applications by identifying suspicious SQL-related patterns and payloads within HTTP requests recorded in Apache access logs forwarded to Microsoft Sentinel through the Syslog collector. The rule generates alerts for both successful and repeated SQL injection attempts, helping security teams identify potential exploitation activity and investigate malicious access attempts against Apache-hosted web applications.
+// Severity: High
+//KQL : 
+Syslog
+| where Computer == "abc"
+| extend RawLog = SyslogMessage
+| extend SourceIP = extract(@"^(\S+)", 1, RawLog)
+| extend Identity = extract(@"^\S+\s+(\S+)", 1, RawLog)
+| extend User = extract(@"^\S+\s+\S+\s+(\S+)", 1, RawLog)
+| extend EventTime = extract(@"\[([^\]]+)\]", 1, RawLog)
+| extend HttpMethod = extract(@"""([A-Z]+)", 1, RawLog)
+| extend URL = extract(@"""[A-Z]+\s+(\S+)", 1, RawLog)
+| extend HttpVersion = extract(@"HTTP\/([0-9.]+)", 1, RawLog)
+| extend StatusCode = toint(extract(@""" (\d{3}) ", 1, RawLog))
+| extend ResponseSize = tolong(extract(@""" \d{3} (\d+)", 1, RawLog))
+| extend Referrer = extract(@"""(https?:\/\/[^""]*)""", 1, RawLog)
+| extend UserAgent = extract(@"""([^""]*)""$", 1, RawLog)
+| where isnotempty(HttpMethod)
+| extend LowerURL = tolower(url_decode(URL))
+| where LowerURL !startswith "/contact-us"
+| where LowerURL has_any(
+    "union select",
+    "union all select",
+    "case when",
+    "information_schema",
+    "xp_cmdshell",
+    "sleep(",
+    "!sleep(",
+    "pg_sleep(",
+    "waitfor delay",
+    "extractvalue(",
+    "updatexml(",
+    "benchmark(",
+    "load_file(",
+    "outfile",
+    "into outfile"
+    )
+    or LowerURL matches regex @"(?i)(\band\s*\(\s*select\s+)"
+    or LowerURL matches regex @"(?i)(\bselect\s+\d+\s+union\s+select\b)"
+    or LowerURL matches regex @"(?i)('?\s*and\s+\d+\s*=\s*\d+)"
+    or LowerURL matches regex @"(?i)('?\s*or\s+\d+\s*=\s*\d+)"
+    or LowerURL matches regex @"(?i)('.*and.*'.*='.*')"
+    or LowerURL matches regex @"(?i)('.*or.*=.*|'.*and.*=.*)"
+| summarize
+    EventCount = count(),
+    FirstSeen = min(TimeGenerated),
+    LastSeen = max(TimeGenerated),
+    URLs = make_set(URL, 10),
+    StatusCodes = make_set(StatusCode, 10),
+    UserAgents = make_set(UserAgent, 5),
+    HasSuccess = max(iff(StatusCode == 200, 1, 0))
+    by SourceIP
+| where HasSuccess == 1 or (HasSuccess == 0 and EventCount > 2)
+| extend AlertName = case(
+                         HasSuccess == 1,
+                         "UC-IA-T1190-Successful SQL Injection Attempt Against Public-Facing Application",
+                         "UC-IA-T1190-Repeated SQL Injection Attempts Against Public-Facing Application"
+                     )
+| extend AlertDescription = case(
+                                HasSuccess == 1,
+                                "High-confidence SQL injection payload observed in a web request that returned HTTP 200, indicating the application successfully processed the request.",
+                                "Multiple high-confidence SQL injection attempts were observed from the same source IP against a public-facing application without a successful HTTP 200 response."
+                            )
+| extend Severity = case(
+                        HasSuccess == 1,
+                        "High",
+                        "Medium"
+                    )
+| project
+    FirstSeen,
+    LastSeen,
+    AlertName,
+    AlertDescription,
+    Severity,
+    SourceIP,
+    EventCount,
+    StatusCodes,
+    URLs,
+    UserAgents
+| order by LastSeen desc
+
+// Please add the AlertName, AlertDescription, and Severity fields under the Alert Details enrichment fields.
+
+
